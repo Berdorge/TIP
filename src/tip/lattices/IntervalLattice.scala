@@ -19,7 +19,13 @@ object IntervalLattice extends LatticeWithOps {
 
   val EmptyInterval: Element = (PInf, MInf)
 
-  implicit def int2num(i: Int): IntNum = IntNum(i)
+  implicit def long2num(l: Long): Num = if (l.toInt.toLong == l) {
+    IntNum(l.toInt)
+  } else if (l > 0) {
+    PInf
+  } else {
+    MInf
+  }
 
   val bottom: Element = EmptyInterval
 
@@ -36,6 +42,10 @@ object IntervalLattice extends LatticeWithOps {
       case _ => lub(y, x)
     }
 
+  def leq(x: (Int, Int), y: (Int, Int)) = (x, y) match {
+    case ((x1, x2), (y1, y2)) => y1 <= x1 && x2 <= y2
+  }
+
   /**
     * A Num is an int, +infinity, or -infinity.
     */
@@ -43,7 +53,7 @@ object IntervalLattice extends LatticeWithOps {
     def compare(that: Num): Int =
       (this, that) match {
         case (x, y) if x == y => 0
-        case (IntNum(a), IntNum(b)) => a - b
+        case (IntNum(a), IntNum(b)) => a compare b
         case (MInf, _) => -1
         case (_, PInf) => -1
         case (PInf, _) => 1
@@ -75,12 +85,12 @@ object IntervalLattice extends LatticeWithOps {
     val low = (a._1, b._1) match {
       case (_, MInf) | (MInf, _) => MInf
       case (_, PInf) | (PInf, _) => PInf
-      case (IntNum(i), IntNum(j)) => IntNum(i + j)
+      case (IntNum(i), IntNum(j)) => long2num(i.toLong + j.toLong)
     }
     val high = (a._2, b._2) match {
       case (_, PInf) | (PInf, _) => PInf
       case (_, MInf) | (MInf, _) => MInf
-      case (IntNum(i), IntNum(j)) => IntNum(i + j)
+      case (IntNum(i), IntNum(j)) => long2num(i.toLong + j.toLong)
     }
     (low, high)
   }
@@ -100,7 +110,7 @@ object IntervalLattice extends LatticeWithOps {
       case _ =>
         val sb = signs(b)
         val sbNoZero = sb - 0
-        val d = { (x: Int, y: Int) =>
+        val d = { (x: Long, y: Long) =>
           x / y
         }
         val arange = sbNoZero.map(s => opNum(a, s, d))
@@ -163,14 +173,29 @@ object IntervalLattice extends LatticeWithOps {
   /**
     * Apples the binary operator `op` on the interval `a` and the int `b`.
     */
-  private def opNum(a: Element, b: Int, op: (Int, Int) => Int): Element =
+  private def opNum(a: Element, b: Int, op: (Long, Long) => Long): Element =
     a match {
       case (PInf, _) => EmptyInterval
       case (_, MInf) => EmptyInterval
       case (MInf, PInf) => FullInterval
-      case (MInf, IntNum(x)) => if (b == 0) (0, 0) else if (b < 0) (op(x, b), PInf) else (MInf, op(x, b))
-      case (IntNum(x), PInf) => if (b == 0) (0, 0) else if (b < 0) (MInf, op(x, b)) else (op(x, b), PInf)
-      case (IntNum(x), IntNum(y)) => (min(Set(op(x, b), op(y, b))), max(Set(op(x, b), op(y, b))))
+      case (MInf, IntNum(x)) => if (b == 0) {
+        (0, 0)
+      } else if (b < 0) {
+        (long2num(op(x, b)), PInf)
+      } else {
+        (MInf, long2num(op(x, b)))
+      }
+      case (IntNum(x), PInf) => if (b == 0) {
+        (0, 0)
+      } else if (b < 0) {
+        (MInf, long2num(op(x, b)))
+      } else {
+        (long2num(op(x, b)), PInf)
+      }
+      case (IntNum(x), IntNum(y)) => (
+        min(Set(op(x, b), op(y, b))),
+        max(Set(op(x, b), op(y, b)))
+      )
     }
 
   /**
@@ -183,7 +208,7 @@ object IntervalLattice extends LatticeWithOps {
       case _ =>
         val sa = signs(a)
         val sb = signs(b)
-        val mult = { (x: Int, y: Int) =>
+        val mult = { (x: Long, y: Long) =>
           x * y
         }
         val arange = sb.map(s => opNum(a, s, mult))
